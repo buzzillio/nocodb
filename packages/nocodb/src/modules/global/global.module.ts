@@ -1,19 +1,18 @@
 import { Global, Module } from '@nestjs/common';
-import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ExtractJwt } from 'passport-jwt';
 import { SocketGateway } from '../../gateways/socket.gateway';
 import { Connection } from '../../connection/connection';
 import { GlobalGuard } from '../../guards/global/global.guard';
 import { MetaService } from '../../meta/meta.service';
 import { JwtStrategy } from '../../strategies/jwt.strategy';
-import NcConfigFactory from '../../utils/NcConfigFactory';
+import { NcConfig, prepareEnv } from '../../utils/nc-config';
 import { UsersService } from '../../services/users/users.service';
 import type { Provider } from '@nestjs/common';
 
 export const JwtStrategyProvider: Provider = {
   provide: JwtStrategy,
-  useFactory: async (usersService: UsersService) => {
-    const config = await NcConfigFactory.make();
+  useFactory: async (usersService: UsersService, connection: Connection) => {
+    const config = connection.config;
 
     const options = {
       // ignoreExpiration: false,
@@ -26,14 +25,23 @@ export const JwtStrategyProvider: Provider = {
 
     return new JwtStrategy(options, usersService);
   },
-  inject: [UsersService],
+  inject: [UsersService, Connection],
 };
 
 @Global()
 @Module({
   imports: [],
   providers: [
-    Connection,
+    {
+      useFactory: async () => {
+        // NC_DATABASE_URL_FILE, DATABASE_URL_FILE, DATABASE_URL, NC_DATABASE_URL to NC_DB
+        await prepareEnv();
+
+        const config = await NcConfig.createByEnv();
+        return new Connection(config);
+      },
+      provide: Connection,
+    },
     MetaService,
     UsersService,
     JwtStrategyProvider,
