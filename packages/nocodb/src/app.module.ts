@@ -43,7 +43,7 @@ import type {
     ...(process.env['NC_REDIS_URL']
       ? [
           BullModule.forRoot({
-            redis: process.env.NC_REDIS_URL,
+            url: process.env.NC_REDIS_URL,
           }),
         ]
       : []),
