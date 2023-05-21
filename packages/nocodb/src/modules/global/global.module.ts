@@ -7,6 +7,11 @@ import { MetaService } from '../../meta/meta.service';
 import { JwtStrategy } from '../../strategies/jwt.strategy';
 import { NcConfig, prepareEnv } from '../../utils/nc-config';
 import { UsersService } from '../../services/users/users.service';
+import Noco from '../../Noco';
+import NcPluginMgrv2 from '../../helpers/NcPluginMgrv2';
+import NcUpgrader from '../../version-upgrader/NcUpgrader';
+import NocoCache from '../../cache/NocoCache';
+import type { IEventEmitter } from '../event-emitter/event-emitter.interface';
 import type { Provider } from '@nestjs/common';
 
 export const JwtStrategyProvider: Provider = {
@@ -42,7 +47,38 @@ export const JwtStrategyProvider: Provider = {
       },
       provide: Connection,
     },
-    MetaService,
+    {
+      useFactory: async (
+        connection: Connection,
+        eventEmitter: IEventEmitter,
+      ) => {
+        // set version
+        process.env.NC_VERSION = '0105004';
+
+        // init cache
+        await NocoCache.init();
+
+        // init meta service
+        const metaService = new MetaService(connection);
+        await metaService.init();
+
+        // provide meta and config to Noco
+        Noco._ncMeta = metaService;
+        Noco.config = connection.config;
+        Noco.eventEmitter = eventEmitter;
+
+        // init plugin manager
+        await NcPluginMgrv2.init(Noco.ncMeta);
+        await Noco.loadEEState();
+
+        // run upgrader
+        await NcUpgrader.upgrade({ ncMeta: Noco._ncMeta });
+
+        return metaService;
+      },
+      provide: MetaService,
+      inject: [Connection, 'IEventEmitter'],
+    },
     UsersService,
     JwtStrategyProvider,
     GlobalGuard,
